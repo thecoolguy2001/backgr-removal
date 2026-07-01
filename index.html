@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNBG — cut out any background, on your machine</title>
+<style>
+  :root{ --bg:#0b0d12; --ink:#eef1f7; --muted:#8a93a8; --acc:#6aa0ff; --line:rgba(255,255,255,.1); }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ min-height:100%; }
+  body{ background:radial-gradient(ellipse 90% 60% at 50% 0%,#141824,#08090e 70%); color:var(--ink);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .wrap{ width:min(680px,95vw); }
+  h1{ font-size:14px; letter-spacing:6px; text-transform:uppercase; color:var(--muted); text-align:center; }
+  .tag{ text-align:center; color:var(--muted); font-size:14px; margin-top:12px; line-height:1.6; }
+  .drop{ margin-top:26px; border:1.5px dashed var(--line); border-radius:22px; padding:44px 30px; text-align:center; cursor:pointer; transition:.18s; background:rgba(255,255,255,.02); }
+  .drop.drag{ border-color:var(--acc); background:rgba(106,160,255,.08); }
+  .drop .g{ font-size:34px; } .drop h2{ font-size:18px; margin-top:14px; } .drop p{ color:var(--muted); font-size:13px; margin-top:8px; }
+  .stage{ display:none; margin-top:22px; }
+  .stage.show{ display:block; }
+  .imgs{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media(max-width:560px){ .imgs{ grid-template-columns:1fr; } }
+  .frame{ border:1px solid var(--line); border-radius:16px; overflow:hidden; aspect-ratio:1; display:flex; align-items:center; justify-content:center; }
+  .frame img{ max-width:100%; max-height:100%; object-fit:contain; }
+  .frame.out{ background-image:linear-gradient(45deg,#20242e 25%,transparent 25%),linear-gradient(-45deg,#20242e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#20242e 75%),linear-gradient(-45deg,transparent 75%,#20242e 75%);
+    background-size:22px 22px; background-position:0 0,0 11px,11px -11px,-11px 0; background-color:#151820; }
+  .cap{ text-align:center; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:8px; }
+  .prog{ margin-top:20px; display:none; }
+  .prog.show{ display:block; }
+  .bar{ height:6px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; }
+  .bar > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--acc),#9b7bff); transition:width .2s; }
+  .pstat{ font-size:12px; color:var(--muted); margin-top:10px; text-align:center; }
+  .foot{ display:flex; gap:12px; margin-top:20px; }
+  .btn{ flex:1; border:0; border-radius:12px; padding:14px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
+    background:linear-gradient(180deg,var(--acc),#3f74e0); color:#fff; }
+  .btn.ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); }
+  .btn:disabled{ opacity:.5; cursor:default; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unbg</h1>
+  <div class="tag">Cut the background out of any photo — free, unlimited, and 100% on your machine.<br>The AI model runs in your browser; your image is never uploaded anywhere.</div>
+
+  <div class="drop" id="drop">
+    <div class="g">✂️</div>
+    <h2>Drop an image (or click)</h2>
+    <p>Works best with a clear subject — a person, product, pet.</p>
+  </div>
+  <input type="file" id="file" accept="image/*" hidden>
+
+  <div class="prog" id="progWrap"><div class="bar"><i id="bar"></i></div><div class="pstat" id="pstat">Loading the model…</div></div>
+
+  <div class="stage" id="stage">
+    <div class="imgs">
+      <div><div class="frame"><img id="orig" alt=""></div><div class="cap">original</div></div>
+      <div><div class="frame out"><img id="result" alt=""></div><div class="cap">cut out</div></div>
+    </div>
+    <div class="foot">
+      <button class="btn" id="download" disabled>Download PNG</button>
+      <button class="btn ghost" id="another">Another</button>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { AutoModel, AutoProcessor, RawImage, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+env.allowLocalModels=false;
+
+const $=id=>document.getElementById(id);
+const drop=$('drop'), file=$('file');
+let model=null, processor=null, resultBlobUrl=null;
+
+drop.addEventListener('click',()=>file.click());
+file.addEventListener('change',e=>{ if(e.target.files[0]) run(e.target.files[0]); });
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+drop.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) run(f); });
+$('another').addEventListener('click',()=>{ $('stage').classList.remove('show'); drop.style.display='block'; file.value=''; });
+
+async function ensureModel(){
+  if(model) return;
+  $('progWrap').classList.add('show'); $('pstat').textContent='Downloading model (first time only, ~45MB)…';
+  const prog=p=>{ if(p.status==='progress'&&p.total){ $('bar').style.width=Math.round(p.loaded/p.total*100)+'%'; } };
+  const opts={ progress_callback:prog };
+  try{ model=await AutoModel.from_pretrained('briaai/RMBG-1.4',{ device:'webgpu', ...opts }); }
+  catch(e){ $('pstat').textContent='WebGPU unavailable — using CPU (slower)…'; model=await AutoModel.from_pretrained('briaai/RMBG-1.4', opts); }
+  processor=await AutoProcessor.from_pretrained('briaai/RMBG-1.4', opts);
+}
+
+async function run(f){
+  drop.style.display='none';
+  $('orig').src=URL.createObjectURL(f);
+  await ensureModel();
+  $('bar').style.width='100%'; $('pstat').textContent='Removing background…';
+  try{
+    const image=await RawImage.fromURL(URL.createObjectURL(f));
+    const { pixel_values }=await processor(image);
+    const { output }=await model({ input:pixel_values });
+    const mask=await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(image.width,image.height);
+    // composite: original RGB + mask as alpha
+    const cv=document.createElement('canvas'); cv.width=image.width; cv.height=image.height;
+    const c=cv.getContext('2d');
+    const bmp=await createImageBitmap(await f); c.drawImage(bmp,0,0,image.width,image.height);
+    const id=c.getImageData(0,0,image.width,image.height);
+    for(let i=0;i<mask.data.length;i++){ id.data[i*4+3]=mask.data[i]; }
+    c.putImageData(id,0,0);
+    cv.toBlob(b=>{ if(resultBlobUrl) URL.revokeObjectURL(resultBlobUrl); resultBlobUrl=URL.createObjectURL(b);
+      $('result').src=resultBlobUrl; $('download').disabled=false;
+      $('download').onclick=()=>{ const a=document.createElement('a'); a.href=resultBlobUrl; a.download=f.name.replace(/\.[^.]+$/,'')+'-cutout.png'; a.click(); };
+    },'image/png');
+    $('progWrap').classList.remove('show'); $('stage').classList.add('show');
+  }catch(e){ console.error(e); $('pstat').textContent='Something went wrong: '+e.message; }
+}
+</script>
+</body>
+</html>
