@@ -4,47 +4,65 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UNBG — cut out any background, on your machine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{ --bg:#0b0d12; --ink:#eef1f7; --muted:#8a93a8; --acc:#6aa0ff; --line:rgba(255,255,255,.1); }
+  :root{ --mat:#2c5548; --mat-dk:#254a3f; --gridline:rgba(255,255,255,.09); --gridmajor:rgba(255,255,255,.18);
+    --steel:#e7ebe8; --steel-line:#c3ccc7; --ink:#111815; --muted:#5c6a63; --acc:#ff5a36; --mono:'IBM Plex Mono',monospace; }
   *{ margin:0; padding:0; box-sizing:border-box; }
   html,body{ min-height:100%; }
-  body{ background:radial-gradient(ellipse 90% 60% at 50% 0%,#141824,#08090e 70%); color:var(--ink);
+  body{
+    background:
+      repeating-linear-gradient(0deg, var(--gridline) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(90deg, var(--gridline) 0 1px, transparent 1px 32px),
+      repeating-linear-gradient(0deg, var(--gridmajor) 0 1.5px, transparent 1.5px 160px),
+      repeating-linear-gradient(90deg, var(--gridmajor) 0 1.5px, transparent 1.5px 160px),
+      radial-gradient(120% 90% at 50% 0%, var(--mat), var(--mat-dk));
+    color:var(--ink);
     font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; -webkit-font-smoothing:antialiased;
     min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-  .wrap{ width:min(680px,95vw); }
-  h1{ font-size:14px; letter-spacing:6px; text-transform:uppercase; color:var(--muted); text-align:center; }
-  .tag{ text-align:center; color:var(--muted); font-size:14px; margin-top:12px; line-height:1.6; }
-  .drop{ margin-top:26px; border:1.5px dashed var(--line); border-radius:22px; padding:44px 30px; text-align:center; cursor:pointer; transition:.18s; background:rgba(255,255,255,.02); }
-  .drop.drag{ border-color:var(--acc); background:rgba(106,160,255,.08); }
-  .drop .g{ font-size:34px; } .drop h2{ font-size:18px; margin-top:14px; } .drop p{ color:var(--muted); font-size:13px; margin-top:8px; }
-  .stage{ display:none; margin-top:22px; }
+  .wrap{ width:min(680px,95vw); background:var(--steel); border-radius:10px; padding:36px 38px 32px;
+    box-shadow:0 30px 70px rgba(0,10,6,.4), inset 0 1px 0 rgba(255,255,255,.7); position:relative; }
+  .wrap::before{ content:''; position:absolute; left:22px; top:0; bottom:0; width:1px;
+    background:repeating-linear-gradient(0deg, var(--steel-line) 0 1px, transparent 1px 12px); opacity:.7; }
+  h1{ font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.32em; text-transform:uppercase; color:var(--ink); text-align:left; padding-left:34px; }
+  h1::before{ content:'✂ '; color:var(--acc); }
+  .tag{ text-align:left; color:var(--muted); font-size:13.5px; margin-top:10px; line-height:1.6; padding-left:34px; max-width:52ch; }
+  .drop{ margin-top:24px; margin-left:34px; border:1.5px dashed var(--steel-line); border-radius:4px; padding:40px 30px;
+    text-align:center; cursor:pointer; transition:.18s; background:repeating-linear-gradient(135deg, transparent 0 10px, rgba(0,0,0,.02) 10px 11px); }
+  .drop.drag{ border-color:var(--acc); background-color:rgba(255,90,54,.06); }
+  .drop .g{ font-family:var(--mono); font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--acc); font-weight:600; }
+  .drop h2{ font-size:16.5px; margin-top:12px; font-weight:600; color:var(--ink); }
+  .drop p{ color:var(--muted); font-size:12.5px; margin-top:8px; }
+  .stage{ display:none; margin-top:22px; margin-left:34px; }
   .stage.show{ display:block; }
   .imgs{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media(max-width:560px){ .imgs{ grid-template-columns:1fr; } }
-  .frame{ border:1px solid var(--line); border-radius:16px; overflow:hidden; aspect-ratio:1; display:flex; align-items:center; justify-content:center; }
+  @media(max-width:560px){ .imgs{ grid-template-columns:1fr; } .wrap{padding:30px 24px 26px;} .wrap::before,.drop,.stage{margin-left:0;} h1,.tag{padding-left:0;} }
+  .frame{ border:1px solid var(--steel-line); border-radius:6px; overflow:hidden; aspect-ratio:1; display:flex; align-items:center; justify-content:center; background:#f2f4f2; position:relative; }
   .frame img{ max-width:100%; max-height:100%; object-fit:contain; }
-  .frame.out{ background-image:linear-gradient(45deg,#20242e 25%,transparent 25%),linear-gradient(-45deg,#20242e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#20242e 75%),linear-gradient(-45deg,transparent 75%,#20242e 75%);
-    background-size:22px 22px; background-position:0 0,0 11px,11px -11px,-11px 0; background-color:#151820; }
-  .cap{ text-align:center; font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:8px; }
-  .prog{ margin-top:20px; display:none; }
+  .frame.out{ background-image:linear-gradient(45deg,#dfe4e0 25%,transparent 25%),linear-gradient(-45deg,#dfe4e0 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dfe4e0 75%),linear-gradient(-45deg,transparent 75%,#dfe4e0 75%);
+    background-size:20px 20px; background-position:0 0,0 10px,10px -10px,-10px 0; background-color:#f2f4f2; }
+  .cap{ text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin-top:9px; }
+  .prog{ margin-top:20px; margin-left:34px; display:none; }
   .prog.show{ display:block; }
-  .bar{ height:6px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; }
-  .bar > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--acc),#9b7bff); transition:width .2s; }
-  .pstat{ font-size:12px; color:var(--muted); margin-top:10px; text-align:center; }
-  .foot{ display:flex; gap:12px; margin-top:20px; }
-  .btn{ flex:1; border:0; border-radius:12px; padding:14px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;
-    background:linear-gradient(180deg,var(--acc),#3f74e0); color:#fff; }
-  .btn.ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); }
-  .btn:disabled{ opacity:.5; cursor:default; }
+  .bar{ height:4px; border-radius:2px; background:rgba(0,0,0,.08); overflow:hidden; }
+  .bar > i{ display:block; height:100%; width:0%; background:var(--acc); transition:width .2s; }
+  .pstat{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:10px; text-align:left; }
+  .foot{ display:flex; gap:10px; margin-top:20px; }
+  .btn{ flex:1; border:0; border-radius:6px; padding:13px; font-family:'Inter',sans-serif; font-size:13.5px; font-weight:700; cursor:pointer;
+    background:var(--acc); color:#fff2ec; letter-spacing:.01em; }
+  .btn.ghost{ background:transparent; border:1px solid var(--steel-line); color:var(--ink); }
+  .btn:disabled{ opacity:.4; cursor:default; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Unbg</h1>
-  <div class="tag">Cut the background out of any photo — free, unlimited, and 100% on your machine.<br>The AI model runs in your browser; your image is never uploaded anywhere.</div>
+  <div class="tag">Cut the background out of any photo — free, unlimited, and 100% on your machine. The model runs in your browser; your image is never uploaded anywhere.</div>
 
   <div class="drop" id="drop">
-    <div class="g">✂️</div>
+    <div class="g">Cutting line</div>
     <h2>Drop an image (or click)</h2>
     <p>Works best with a clear subject — a person, product, pet.</p>
   </div>
